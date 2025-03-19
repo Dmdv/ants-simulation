@@ -49,71 +49,77 @@ impl Simulation {
     }
 
     fn step(&mut self) {
-        let mut new_positions = HashMap::new();
         let mut colonies_to_destroy = HashSet::new();
+        let mut ants_to_kill = HashSet::new();
+        let mut moves_to_make = Vec::new();
+        let mut ants_to_remove = Vec::new();
 
-        // Move all ants
+        // Single pass: collect moves and process fights
         for (ant_id, current_colony) in &self.ant_positions {
             if let Some(colony) = self.colonies.get(current_colony) {
-                // Get all possible directions and their target colonies
                 let targets: Vec<(&Direction, &String)> = colony.tunnels.iter().collect();
 
                 if !targets.is_empty() {
-                    // Filter out colonies that already have an ant
                     let available_targets: Vec<_> = targets.iter()
                         .filter(|(_, target)| self.colony_counts.get(*target).unwrap_or(&0) == &0)
                         .collect();
 
                     if !available_targets.is_empty() {
-                        // Randomly choose from available targets
                         let target = available_targets.choose(&mut rand::thread_rng()).unwrap().1;
-                        new_positions.insert(*ant_id, target.clone());
-                        *self.ant_moves.get_mut(ant_id).unwrap() += 1;
+                        
+                        // Check if this colony already has an ant
+                        if let Some(existing_ant) = moves_to_make.iter().find(|(_, t)| t == target) {
+                            // Fight detected
+                            colonies_to_destroy.insert(target.clone());
+                            ants_to_kill.insert(existing_ant.0);
+                            ants_to_kill.insert(*ant_id);
+                            
+                            // Update colony counts for killed ants
+                            if let Some(old_colony) = self.ant_positions.get(&existing_ant.0) {
+                                *self.colony_counts.get_mut(old_colony).unwrap() -= 1;
+                            }
+                            if let Some(old_colony) = self.ant_positions.get(ant_id) {
+                                *self.colony_counts.get_mut(old_colony).unwrap() -= 1;
+                            }
+                            
+                            // Collect ants to remove
+                            ants_to_remove.push(existing_ant.0);
+                            ants_to_remove.push(*ant_id);
+                            
+                            println!("{} has been destroyed by ant {} and ant {}!", 
+                                target, existing_ant.0, ant_id);
+                        } else {
+                            moves_to_make.push((*ant_id, target.clone()));
+                        }
                     }
                 }
             }
         }
 
-        // Check for fights
-        let mut positions: HashMap<String, Vec<usize>> = HashMap::new();
-        for (ant_id, colony) in &new_positions {
-            positions.entry(colony.clone()).or_default().push(*ant_id);
+        // Remove killed ants
+        for ant_id in ants_to_remove {
+            self.ant_positions.remove(&ant_id);
         }
 
-        // Process fights
-        for (colony_name, ants) in positions {
-            if ants.len() >= 2 {
-                println!("{} has been destroyed by ant {} and ant {}!", 
-                    colony_name, ants[0], ants[1]);
-                colonies_to_destroy.insert(colony_name);
-                
-                // Remove all ants that were in this fight
-                for &ant_id in &ants {
-                    self.ant_positions.remove(&ant_id);
-                }
-            }
-        }
-
-        // Update positions and remove destroyed colonies
-        let destroyed_colonies: HashSet<String> = colonies_to_destroy.iter().cloned().collect();
-        for colony_name in &destroyed_colonies {
-            if let Some(colony) = self.colonies.get_mut(colony_name) {
-                colony.is_destroyed = true;
-                // Remove tunnels to this colony from other colonies
-                for other_colony in self.colonies.values_mut() {
-                    other_colony.remove_tunnel_to(colony_name);
-                }
-            }
-        }
-
-        // Update ant positions and colony counts
-        for (ant_id, new_colony) in new_positions {
-            if !destroyed_colonies.contains(&new_colony) {
+        // Update colonies and ant positions in a single pass
+        for (ant_id, new_colony) in moves_to_make {
+            if !colonies_to_destroy.contains(&new_colony) && !ants_to_kill.contains(&ant_id) {
                 if let Some(old_colony) = self.ant_positions.get(&ant_id) {
                     *self.colony_counts.get_mut(old_colony).unwrap() -= 1;
                 }
                 *self.colony_counts.entry(new_colony.clone()).or_insert(0) += 1;
                 self.ant_positions.insert(ant_id, new_colony);
+                *self.ant_moves.get_mut(&ant_id).unwrap() += 1;
+            }
+        }
+
+        // Update destroyed colonies
+        for colony_name in &colonies_to_destroy {
+            if let Some(colony) = self.colonies.get_mut(colony_name) {
+                colony.is_destroyed = true;
+                for other_colony in self.colonies.values_mut() {
+                    other_colony.remove_tunnel_to(colony_name);
+                }
             }
         }
     }
