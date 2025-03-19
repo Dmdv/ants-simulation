@@ -1,10 +1,10 @@
 Ant Mania
 ==============
 
-The planet of Hiveum has been infested by giant space ants and you are tasked 
+The planet has been infested by giant space ants, and you are tasked
 with simulating the invasion.
 
-You are given a map containing the names of colonies on Hiveum. The map is in a
+You are given a map containing the names of colonies on the plant. The map is in a
 file, with one colony per line. 
 The colony name is first,followed by 1-4 directions (north, south, east, or west). 
 Each one represents a tunnel to another colony that lies in that direction.
