@@ -6,6 +6,7 @@ pub struct Simulation {
     colonies: HashMap<String, Colony>,
     ant_positions: HashMap<usize, String>,
     ant_moves: HashMap<usize, u32>,
+    colony_counts: HashMap<String, usize>,
     max_moves: u32,
     step_count: u32,
     max_steps: u32,
@@ -15,11 +16,13 @@ impl Simulation {
     pub fn new(colonies: HashMap<String, Colony>, num_ants: usize) -> Self {
         let mut ant_positions = HashMap::new();
         let mut ant_moves = HashMap::new();
+        let mut colony_counts = HashMap::new();
         let colony_names: Vec<String> = colonies.keys().cloned().collect();
 
         for ant_id in 0..num_ants {
             let random_colony = colony_names.choose(&mut rand::thread_rng()).unwrap().clone();
-            ant_positions.insert(ant_id, random_colony);
+            ant_positions.insert(ant_id, random_colony.clone());
+            *colony_counts.entry(random_colony).or_insert(0) += 1;
             ant_moves.insert(ant_id, 0);
         }
 
@@ -27,9 +30,10 @@ impl Simulation {
             colonies,
             ant_positions,
             ant_moves,
+            colony_counts,
             max_moves: 10_000,
             step_count: 0,
-            max_steps: 100_000, // Reduced from 1,000,000
+            max_steps: 100_000,
         }
     }
 
@@ -44,10 +48,6 @@ impl Simulation {
         }
     }
 
-    fn get_colony_ant_count(&self, colony_name: &str) -> usize {
-        self.ant_positions.values().filter(|&c| c == colony_name).count()
-    }
-
     fn step(&mut self) {
         let mut new_positions = HashMap::new();
         let mut colonies_to_destroy = HashSet::new();
@@ -56,22 +56,20 @@ impl Simulation {
         for (ant_id, current_colony) in &self.ant_positions {
             if let Some(colony) = self.colonies.get(current_colony) {
                 // Get all possible directions and their target colonies
-                let mut targets: Vec<(&Direction, &String)> = colony.tunnels.iter().collect();
+                let targets: Vec<(&Direction, &String)> = colony.tunnels.iter().collect();
 
                 if !targets.is_empty() {
-                    // Sort targets by number of ants in them (prefer colonies with more ants)
-                    targets.sort_by_key(|(_, target)| self.get_colony_ant_count(target));
-                    targets.reverse();
+                    // Filter out colonies that already have an ant
+                    let available_targets: Vec<_> = targets.iter()
+                        .filter(|(_, target)| self.colony_counts.get(*target).unwrap_or(&0) == &0)
+                        .collect();
 
-                    // 70% chance to choose a colony with more ants
-                    let target = if rand::random::<f32>() < 0.7 {
-                        targets[0].1
-                    } else {
-                        targets.choose(&mut rand::thread_rng()).unwrap().1
-                    };
-
-                    new_positions.insert(*ant_id, target.clone());
-                    *self.ant_moves.get_mut(ant_id).unwrap() += 1;
+                    if !available_targets.is_empty() {
+                        // Randomly choose from available targets
+                        let target = available_targets.choose(&mut rand::thread_rng()).unwrap().1;
+                        new_positions.insert(*ant_id, target.clone());
+                        *self.ant_moves.get_mut(ant_id).unwrap() += 1;
+                    }
                 }
             }
         }
@@ -108,9 +106,13 @@ impl Simulation {
             }
         }
 
-        // Update ant positions
+        // Update ant positions and colony counts
         for (ant_id, new_colony) in new_positions {
             if !destroyed_colonies.contains(&new_colony) {
+                if let Some(old_colony) = self.ant_positions.get(&ant_id) {
+                    *self.colony_counts.get_mut(old_colony).unwrap() -= 1;
+                }
+                *self.colony_counts.entry(new_colony.clone()).or_insert(0) += 1;
                 self.ant_positions.insert(ant_id, new_colony);
             }
         }
