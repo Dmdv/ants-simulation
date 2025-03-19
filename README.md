@@ -39,28 +39,6 @@ Fizz north=Buzz west=Bla south=Blub
 Buzz south=Fizz west=Blip
 ```
 
-## Performance Optimization Steps
-
-1. **Efficient Data Structures**
-   - Used `HashMap` for O(1) lookups of colonies and ant positions
-   - Implemented `HashSet` for tracking colonies to destroy
-   - Minimized allocations during simulation steps
-
-2. **Memory Management**
-   - Reused data structures where possible
-   - Minimized string cloning
-   - Used references instead of cloning where appropriate
-
-3. **Algorithm Optimization**
-   - Batch processing of ant movements
-   - Efficient colony destruction handling
-   - Early termination when no ants are active
-
-4. **Benchmarking**
-   - Included comprehensive benchmarks
-   - Tests with varying numbers of ants
-   - Grid-based test map for consistent results
-
 ## Running Benchmarks
 
 ```bash
