@@ -1,6 +1,6 @@
 # Ant Mania
 
-A Rust implementation of the Ant Mania simulation challenge. This program simulates the invasion of giant space ants on the planet.
+This program simulates the invasion of giant space ants on the planet.
 
 ## Features
 
