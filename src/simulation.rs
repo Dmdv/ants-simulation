@@ -2,19 +2,67 @@ use std::collections::{HashMap, HashSet};
 use rand::seq::SliceRandom;
 use crate::colony::{Colony, Direction};
 
+/// Maximum number of moves allowed per ant
+const MAX_MOVES: u32 = 10_000;
+/// Maximum number of steps allowed in the simulation
+const MAX_STEPS: u32 = 100_000;
+
+/// Error type for simulation errors
+#[derive(Debug)]
+pub enum SimulationError {
+    NoColonies,
+    NoAnts,
+    InvalidColony(String),
+}
+
+/// A simulation of ants moving between colonies, fighting when they meet.
+/// 
+/// The simulation follows these rules:
+/// - Ants start at random colonies
+/// - Each step, ants can move to any connected colony that has no other ants
+/// - When two ants meet in a colony, they fight and destroy it
+/// - Destroyed colonies are removed from the map and can't be traveled to
+/// - Simulation ends when all ants are destroyed or max moves reached
 pub struct Simulation {
+    /// Map of colony names to their data
     colonies: HashMap<String, Colony>,
+    /// Current position of each ant
     ant_positions: HashMap<usize, String>,
+    /// Number of moves each ant has made
     ant_moves: HashMap<usize, u32>,
+    /// Number of ants currently in each colony
     colony_counts: HashMap<String, usize>,
-    destroyed_colonies: HashSet<String>,  // Cache destroyed status
+    /// Set of destroyed colony names for fast lookup
+    destroyed_colonies: HashSet<String>,
+    /// Maximum number of moves allowed per ant
     max_moves: u32,
+    /// Current step count of the simulation
     step_count: u32,
+    /// Maximum number of steps allowed
     max_steps: u32,
 }
 
 impl Simulation {
-    pub fn new(colonies: HashMap<String, Colony>, num_ants: usize) -> Self {
+    /// Creates a new simulation with the given colonies and number of ants.
+    /// 
+    /// # Arguments
+    /// * `colonies` - Map of colony names to their data
+    /// * `num_ants` - Number of ants to create
+    /// 
+    /// # Returns
+    /// * `Result<Self, SimulationError>` - The new simulation or an error
+    /// 
+    /// # Errors
+    /// * `SimulationError::NoColonies` - If no colonies are provided
+    /// * `SimulationError::NoAnts` - If num_ants is 0
+    pub fn new(colonies: HashMap<String, Colony>, num_ants: usize) -> Result<Self, SimulationError> {
+        if colonies.is_empty() {
+            return Err(SimulationError::NoColonies);
+        }
+        if num_ants == 0 {
+            return Err(SimulationError::NoAnts);
+        }
+
         let mut ant_positions = HashMap::new();
         let mut ant_moves = HashMap::new();
         let mut colony_counts = HashMap::new();
@@ -27,30 +75,50 @@ impl Simulation {
             ant_moves.insert(ant_id, 0);
         }
 
-        Self {
+        Ok(Self {
             colonies,
             ant_positions,
             ant_moves,
             colony_counts,
             destroyed_colonies: HashSet::new(),
-            max_moves: 10_000,
+            max_moves: MAX_MOVES,
             step_count: 0,
-            max_steps: 100_000,
-        }
+            max_steps: MAX_STEPS,
+        })
     }
 
-    pub fn run(&mut self) {
+    /// Runs the simulation until completion.
+    /// 
+    /// The simulation ends when:
+    /// - All ants are destroyed
+    /// - Each ant has moved max_moves times
+    /// - The simulation reaches max_steps
+    /// 
+    /// # Errors
+    /// * `SimulationError` - If any step fails
+    pub fn run(&mut self) -> Result<(), SimulationError> {
         while self.are_ants_active() {
-            self.step();
+            self.step()?;
             self.step_count += 1;
             if self.step_count >= self.max_steps {
                 println!("Simulation stopped after {} steps", self.max_steps);
                 break;
             }
         }
+        Ok(())
     }
 
-    fn step(&mut self) {
+    /// Performs a single step of the simulation.
+    /// 
+    /// In each step:
+    /// 1. Ants attempt to move to random available colonies
+    /// 2. If two ants meet, they fight and destroy the colony
+    /// 3. Destroyed colonies are removed from the map
+    /// 4. Ant positions and colony counts are updated
+    /// 
+    /// # Errors
+    /// * `SimulationError::InvalidColony` - If an ant is in a non-existent colony
+    fn step(&mut self) -> Result<(), SimulationError> {
         let mut colonies_to_destroy = HashSet::new();
         let mut ants_to_kill = HashSet::new();
         let mut moves_to_make = Vec::new();
@@ -99,6 +167,8 @@ impl Simulation {
                         }
                     }
                 }
+            } else {
+                return Err(SimulationError::InvalidColony(current_colony.clone()));
             }
         }
 
@@ -129,8 +199,15 @@ impl Simulation {
                 }
             }
         }
+
+        Ok(())
     }
 
+    /// Checks if any ants are still active in the simulation.
+    /// 
+    /// An ant is considered active if:
+    /// - It hasn't been destroyed in a fight
+    /// - It hasn't reached max_moves
     fn are_ants_active(&self) -> bool {
         if self.ant_positions.is_empty() {
             return false; // All ants have been destroyed
@@ -145,6 +222,10 @@ impl Simulation {
         false
     }
 
+    /// Prints the final state of the simulation in the required format.
+    /// 
+    /// Format: "colony_name direction=target ..."
+    /// Only prints non-destroyed colonies.
     pub fn print_final_state(&self) {
         for (name, colony) in &self.colonies {
             if !colony.is_destroyed {

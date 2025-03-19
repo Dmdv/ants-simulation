@@ -26,13 +26,14 @@ fn main() {
     let colonies = parser::parse_map_file(&args.map).expect("Failed to parse map file");
     
     // Create and run simulation
-    let mut simulation = Simulation::new(colonies, args.ants);
+    let mut simulation = Simulation::new(colonies, args.ants)
+        .expect("Failed to create simulation");
     
     // Start timing after map is loaded
     let start_time = Instant::now();
     
     // Run the simulation
-    simulation.run();
+    simulation.run().expect("Simulation failed");
     
     // Calculate and print execution time
     let duration = start_time.elapsed();

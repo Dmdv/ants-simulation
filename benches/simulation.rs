@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ants::colony::{Colony, Direction};
 use ants::simulation::Simulation;
 
-fn create_test_map(num_ants: usize) -> (HashMap<String, Colony>, Vec<String>) {
+fn create_test_map(_num_ants: usize) -> (HashMap<String, Colony>, Vec<String>) {
     let mut colonies = HashMap::new();
     let colony_names = vec!["A".to_string(), "B".to_string()];
     
@@ -27,8 +27,9 @@ fn simulation_benchmark(c: &mut Criterion) {
         let (colonies, colony_names) = create_test_map(num_ants);
         c.bench_function(&format!("simulation/{}_ants", num_ants), |b| {
             b.iter(|| {
-                let mut simulation = Simulation::new(black_box(colonies.clone()), black_box(num_ants));
-                simulation.run();
+                let mut simulation = Simulation::new(black_box(colonies.clone()), black_box(num_ants))
+                    .expect("Failed to create simulation");
+                simulation.run().expect("Simulation failed");
             })
         });
     }
