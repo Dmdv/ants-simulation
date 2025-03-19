@@ -26,19 +26,6 @@ Example:
 cargo run --release -- -a 100 -m map.txt
 ```
 
-## Map File Format
-
-The map file should contain one colony per line, with the following format:
-```
-ColonyName direction1=Target1 direction2=Target2 ...
-```
-
-Example:
-```
-Fizz north=Buzz west=Bla south=Blub
-Buzz south=Fizz west=Blip
-```
-
 ## Running Benchmarks
 
 ```bash
