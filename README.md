@@ -1,4 +1,4 @@
-# Ant Mania
+# Invasion
 
 This program simulates the invasion of giant space ants on the planet.
 
