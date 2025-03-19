@@ -7,6 +7,7 @@ pub struct Simulation {
     ant_positions: HashMap<usize, String>,
     ant_moves: HashMap<usize, u32>,
     colony_counts: HashMap<String, usize>,
+    destroyed_colonies: HashSet<String>,  // Cache destroyed status
     max_moves: u32,
     step_count: u32,
     max_steps: u32,
@@ -31,6 +32,7 @@ impl Simulation {
             ant_positions,
             ant_moves,
             colony_counts,
+            destroyed_colonies: HashSet::new(),
             max_moves: 10_000,
             step_count: 0,
             max_steps: 100_000,
@@ -61,7 +63,11 @@ impl Simulation {
 
                 if !targets.is_empty() {
                     let available_targets: Vec<_> = targets.iter()
-                        .filter(|(_, target)| self.colony_counts.get(*target).unwrap_or(&0) == &0)
+                        .filter(|(_, target)| {
+                            // Single HashMap lookup for count and check destroyed status from cache
+                            self.colony_counts.get(*target).unwrap_or(&0) == &0 &&
+                            !self.destroyed_colonies.contains(*target)
+                        })
                         .collect();
 
                     if !available_targets.is_empty() {
@@ -117,6 +123,7 @@ impl Simulation {
         for colony_name in &colonies_to_destroy {
             if let Some(colony) = self.colonies.get_mut(colony_name) {
                 colony.is_destroyed = true;
+                self.destroyed_colonies.insert(colony_name.clone());
                 for other_colony in self.colonies.values_mut() {
                     other_colony.remove_tunnel_to(colony_name);
                 }
