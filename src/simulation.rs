@@ -42,12 +42,10 @@ pub struct Simulation {
     moves_to_make: Vec<(usize, usize, usize)>,
     colonies_to_destroy: Vec<usize>,
     ants_to_kill: Vec<usize>,
-    /// Random number generator for the entire simulation
-    rng: SmallRng,
-    /// Maximum number of moves allowed per ant
-    max_moves: u32,
     /// Current step count of the simulation
     step_count: u32,
+    /// Maximum number of moves allowed per ant
+    max_moves: u32,
     /// Maximum number of steps allowed
     max_steps: u32,
     /// Whether to print debug output
@@ -102,9 +100,8 @@ impl Simulation {
             moves_to_make,
             colonies_to_destroy,
             ants_to_kill,
-            rng,
-            max_moves: MAX_MOVES,
             step_count: 0,
+            max_moves: MAX_MOVES,
             max_steps: MAX_STEPS,
             debug: true,
         })
@@ -185,7 +182,7 @@ impl Simulation {
         // Process fights and moves in a single pass
         for colony_idx in &self.colonies_to_destroy {
             self.destroyed_colonies[*colony_idx] = true;
-            self.colonies[*colony_idx].is_destroyed = true;
+            self.colonies[*colony_idx].set_destroyed(true);
             
             // Remove tunnels to destroyed colony
             for colony in &mut self.colonies {
@@ -232,7 +229,7 @@ impl Simulation {
     /// Only prints non-destroyed colonies.
     pub fn print_final_state(&self) {
         for colony in &self.colonies {
-            if !colony.is_destroyed {
+            if !colony.is_destroyed() {
                 print!("{}", colony.name);
                 for direction in [Direction::North, Direction::South, Direction::East, Direction::West] {
                     if let Some(target_idx) = colony.get_target_colony(&direction) {

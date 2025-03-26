@@ -3,11 +3,11 @@ use rand::rng;
 
 #[derive(Debug, Clone)]
 pub struct Colony {
-    pub name: String,  // Kept for display purposes only
     tunnels: [Option<usize>; 4],  // Fixed-size array for tunnels, indexed by Direction
-    pub is_destroyed: bool,
-    pub ant_id: Option<usize>,  // The ant currently in this colony, if any
     available_directions: u8,  // Bit field tracking available directions
+    ant_id: Option<usize>,  // The ant currently in this colony, if any
+    is_destroyed: bool,  // Whether this colony has been destroyed
+    pub name: String,  // Kept for display purposes only
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
@@ -24,11 +24,11 @@ const DIRECTION_MASKS: [u8; 4] = [0b0001, 0b0010, 0b0100, 0b1000];
 impl Colony {
     pub fn new(name: String) -> Self {
         Self {
-            name,
             tunnels: [None; 4],
-            is_destroyed: false,
-            ant_id: None,
             available_directions: 0,
+            ant_id: None,
+            is_destroyed: false,
+            name,
         }
     }
 
@@ -52,13 +52,16 @@ impl Colony {
         let mut rng = rng();
         let idx = rng.random_range(0..count);
 
-        // Find the nth available direction
+        // Find the nth available direction using bit manipulation
+        let mut remaining = self.available_directions;
         let mut current = 0;
-        for (i, &mask) in DIRECTION_MASKS.iter().enumerate() {
-            if (self.available_directions & mask) != 0 {
+        for i in 0..4 {
+            let mask = DIRECTION_MASKS[i];
+            if (remaining & mask) != 0 {
                 if current == idx {
                     return Some(ALL_DIRECTIONS[i]);
                 }
+                remaining &= !mask;
                 current += 1;
             }
         }
@@ -85,6 +88,14 @@ impl Colony {
 
     pub fn get_ant(&self) -> Option<usize> {
         self.ant_id
+    }
+
+    pub fn is_destroyed(&self) -> bool {
+        self.is_destroyed
+    }
+
+    pub fn set_destroyed(&mut self, destroyed: bool) {
+        self.is_destroyed = destroyed;
     }
 }
 
