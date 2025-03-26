@@ -20,7 +20,7 @@ pub enum SimulationError {
 #[derive(Clone)]
 struct Ant {
     moves: u32,
-    location: Option<usize>,
+    colony_idx: Option<usize>,  // Renamed for clarity
 }
 
 /// A simulation of ants moving between colonies, fighting when they meet.
@@ -36,8 +36,14 @@ pub struct Simulation {
     colonies: Vec<Colony>,
     /// Vector of ants with their state
     ants: Vec<Ant>,
-    /// Vector tracking destroyed colonies (better cache locality than HashSet)
+    /// Bit vector tracking destroyed colonies (better cache locality)
     destroyed_colonies: Vec<bool>,
+    /// Pre-allocated vectors for step operations
+    moves_to_make: Vec<(usize, usize, usize)>,
+    colonies_to_destroy: Vec<usize>,
+    ants_to_kill: Vec<usize>,
+    /// Random number generator for the entire simulation
+    rng: SmallRng,
     /// Maximum number of moves allowed per ant
     max_moves: u32,
     /// Current step count of the simulation
@@ -74,13 +80,18 @@ impl Simulation {
         let mut ants = Vec::with_capacity(num_ants);
         let destroyed_colonies = vec![false; colonies.len()];
 
+        // Pre-allocate vectors for step operations
+        let moves_to_make = Vec::with_capacity(num_ants);
+        let colonies_to_destroy = Vec::with_capacity(colonies.len() / 2);
+        let ants_to_kill = Vec::with_capacity(num_ants);
+
         // Place ants randomly in colonies
         for _ in 0..num_ants {
             let colony_idx = rng.random_range(0..colonies.len());
             colonies[colony_idx].set_ant(Some(ants.len()));
             ants.push(Ant {
                 moves: 0,
-                location: Some(colony_idx),
+                colony_idx: Some(colony_idx),
             });
         }
 
@@ -88,6 +99,10 @@ impl Simulation {
             colonies,
             ants,
             destroyed_colonies,
+            moves_to_make,
+            colonies_to_destroy,
+            ants_to_kill,
+            rng,
             max_moves: MAX_MOVES,
             step_count: 0,
             max_steps: MAX_STEPS,
@@ -136,24 +151,25 @@ impl Simulation {
     /// # Errors
     /// * `SimulationError::InvalidColony` - If an ant is in a non-existent colony
     fn step(&mut self) -> Result<(), SimulationError> {
-        let mut moves_to_make = Vec::with_capacity(self.ants.len());
-        let mut colonies_to_destroy = Vec::new();
-        let mut ants_to_kill = Vec::new();
+        // Clear pre-allocated vectors
+        self.moves_to_make.clear();
+        self.colonies_to_destroy.clear();
+        self.ants_to_kill.clear();
 
-        // First pass: collect moves and fights
+        // Single pass: collect moves and fights
         for ant_id in 0..self.ants.len() {
-            if let Some(colony_idx) = self.ants[ant_id].location {
+            if let Some(colony_idx) = self.ants[ant_id].colony_idx {
                 if let Some(direction) = self.colonies[colony_idx].get_random_direction() {
                     if let Some(target_idx) = self.colonies[colony_idx].get_target_colony(&direction) {
                         if !self.destroyed_colonies[target_idx] {
                             let target_colony = &self.colonies[target_idx];
                             if target_colony.get_ant().is_none() {
-                                moves_to_make.push((ant_id, colony_idx, target_idx));
+                                self.moves_to_make.push((ant_id, colony_idx, target_idx));
                             } else {
                                 // Fight detected
-                                colonies_to_destroy.push(target_idx);
-                                ants_to_kill.push(ant_id);
-                                ants_to_kill.push(target_colony.get_ant().unwrap());
+                                self.colonies_to_destroy.push(target_idx);
+                                self.ants_to_kill.push(ant_id);
+                                self.ants_to_kill.push(target_colony.get_ant().unwrap());
                                 
                                 if self.debug {
                                     println!("{} has been destroyed by ant {} and ant {}!", 
@@ -166,29 +182,29 @@ impl Simulation {
             }
         }
 
-        // Second pass: process fights
-        for colony_idx in colonies_to_destroy {
-            self.destroyed_colonies[colony_idx] = true;
-            self.colonies[colony_idx].is_destroyed = true;
+        // Process fights and moves in a single pass
+        for colony_idx in &self.colonies_to_destroy {
+            self.destroyed_colonies[*colony_idx] = true;
+            self.colonies[*colony_idx].is_destroyed = true;
             
             // Remove tunnels to destroyed colony
             for colony in &mut self.colonies {
-                colony.remove_tunnel_to(colony_idx);
+                colony.remove_tunnel_to(*colony_idx);
             }
         }
 
-        // Third pass: kill ants
-        for ant_id in ants_to_kill {
-            self.ants[ant_id].location = None;
+        // Kill ants
+        for &ant_id in &self.ants_to_kill {
+            self.ants[ant_id].colony_idx = None;
         }
 
-        // Fourth pass: process moves
-        for (ant_id, from_idx, to_idx) in moves_to_make {
-            if !self.destroyed_colonies[to_idx] && self.ants[ant_id].location.is_some() {
+        // Process moves
+        for &(ant_id, from_idx, to_idx) in &self.moves_to_make {
+            if !self.destroyed_colonies[to_idx] && self.ants[ant_id].colony_idx.is_some() {
                 // Move ant to new colony
                 self.colonies[from_idx].set_ant(None);
                 self.colonies[to_idx].set_ant(Some(ant_id));
-                self.ants[ant_id].location = Some(to_idx);
+                self.ants[ant_id].colony_idx = Some(to_idx);
                 self.ants[ant_id].moves += 1;
             }
         }
@@ -203,7 +219,7 @@ impl Simulation {
     /// - It hasn't reached max_moves
     fn are_ants_active(&self) -> bool {
         for ant in &self.ants {
-            if ant.moves < self.max_moves && ant.location.is_some() {
+            if ant.moves < self.max_moves && ant.colony_idx.is_some() {
                 return true;
             }
         }

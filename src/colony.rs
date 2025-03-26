@@ -7,6 +7,7 @@ pub struct Colony {
     tunnels: [Option<usize>; 4],  // Fixed-size array for tunnels, indexed by Direction
     pub is_destroyed: bool,
     pub ant_id: Option<usize>,  // The ant currently in this colony, if any
+    available_directions: u8,  // Bit field tracking available directions
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
@@ -18,6 +19,7 @@ pub enum Direction {
 }
 
 const ALL_DIRECTIONS: [Direction; 4] = [Direction::North, Direction::South, Direction::East, Direction::West];
+const DIRECTION_MASKS: [u8; 4] = [0b0001, 0b0010, 0b0100, 0b1000];
 
 impl Colony {
     pub fn new(name: String) -> Self {
@@ -26,31 +28,41 @@ impl Colony {
             tunnels: [None; 4],
             is_destroyed: false,
             ant_id: None,
+            available_directions: 0,
         }
     }
 
     pub fn add_tunnel(&mut self, direction: Direction, target: usize) {
         self.tunnels[direction as usize] = Some(target);
+        self.available_directions |= DIRECTION_MASKS[direction as usize];
     }
 
     pub fn get_random_direction(&self) -> Option<Direction> {
-        // Use a static array to avoid allocation
-        let mut available_count = 0;
-        let mut available = [Direction::North; 4];
-        
-        for (i, &tunnel) in self.tunnels.iter().enumerate() {
-            if tunnel.is_some() {
-                available[available_count] = ALL_DIRECTIONS[i];
-                available_count += 1;
-            }
-        }
-        
-        if available_count == 0 {
+        if self.available_directions == 0 {
             return None;
         }
-        
-        // Use slice to avoid copying the whole array
-        Some(*(&available[..available_count]).choose(&mut rng()).unwrap())
+
+        // Count available directions
+        let count = self.available_directions.count_ones() as usize;
+        if count == 0 {
+            return None;
+        }
+
+        // Generate random index
+        let mut rng = rng();
+        let idx = rng.random_range(0..count);
+
+        // Find the nth available direction
+        let mut current = 0;
+        for (i, &mask) in DIRECTION_MASKS.iter().enumerate() {
+            if (self.available_directions & mask) != 0 {
+                if current == idx {
+                    return Some(ALL_DIRECTIONS[i]);
+                }
+                current += 1;
+            }
+        }
+        None
     }
 
     pub fn get_target_colony(&self, direction: &Direction) -> Option<usize> {
@@ -58,9 +70,10 @@ impl Colony {
     }
 
     pub fn remove_tunnel_to(&mut self, target: usize) {
-        for tunnel in &mut self.tunnels {
+        for (i, tunnel) in self.tunnels.iter_mut().enumerate() {
             if *tunnel == Some(target) {
                 *tunnel = None;
+                self.available_directions &= !DIRECTION_MASKS[i];
                 break;
             }
         }
