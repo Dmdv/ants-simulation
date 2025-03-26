@@ -3,11 +3,11 @@ use rand::rng;
 
 #[derive(Debug, Clone)]
 pub struct Colony {
-    tunnels: [Option<usize>; 4],  // Fixed-size array for tunnels, indexed by Direction
-    available_directions: u8,  // Bit field tracking available directions
-    ant_id: Option<usize>,  // The ant currently in this colony, if any
-    is_destroyed: bool,  // Whether this colony has been destroyed
-    pub name: String,  // Kept for display purposes only
+    tunnels: [Option<usize>; 4],
+    available_directions: u8, // Bit field tracking available directions
+    ant_id: Option<usize>,    // The ant currently in this colony, if any
+    is_destroyed: bool,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
@@ -18,7 +18,12 @@ pub enum Direction {
     West = 3,
 }
 
-const ALL_DIRECTIONS: [Direction; 4] = [Direction::North, Direction::South, Direction::East, Direction::West];
+const ALL_DIRECTIONS: [Direction; 4] = [
+    Direction::North,
+    Direction::South,
+    Direction::East,
+    Direction::West,
+];
 const DIRECTION_MASKS: [u8; 4] = [0b0001, 0b0010, 0b0100, 0b1000];
 
 impl Colony {
@@ -68,6 +73,7 @@ impl Colony {
         None
     }
 
+    #[inline]
     pub fn get_target_colony(&self, direction: &Direction) -> Option<usize> {
         self.tunnels[*direction as usize]
     }
@@ -82,18 +88,22 @@ impl Colony {
         }
     }
 
+    #[inline]
     pub fn set_ant(&mut self, ant_id: Option<usize>) {
         self.ant_id = ant_id;
     }
 
+    #[inline]
     pub fn get_ant(&self) -> Option<usize> {
         self.ant_id
     }
 
+    #[inline]
     pub fn is_destroyed(&self) -> bool {
         self.is_destroyed
     }
 
+    #[inline]
     pub fn set_destroyed(&mut self, destroyed: bool) {
         self.is_destroyed = destroyed;
     }
@@ -109,4 +119,4 @@ impl Direction {
             _ => None,
         }
     }
-} 
+}
