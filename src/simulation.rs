@@ -50,6 +50,8 @@ pub struct Simulation {
     max_steps: u32,
     /// Whether to print debug output
     debug: bool,
+    /// RNG instance for the simulation
+    rng: SmallRng,
 }
 
 impl Simulation {
@@ -104,6 +106,7 @@ impl Simulation {
             max_moves: MAX_MOVES,
             max_steps: MAX_STEPS,
             debug: true,
+            rng,
         })
     }
 
@@ -156,7 +159,7 @@ impl Simulation {
         // Single pass: collect moves and fights
         for ant_id in 0..self.ants.len() {
             if let Some(colony_idx) = self.ants[ant_id].colony_idx {
-                if let Some(direction) = self.colonies[colony_idx].get_random_direction() {
+                if let Some(direction) = self.colonies[colony_idx].get_random_direction(&mut self.rng) {
                     if let Some(target_idx) = self.colonies[colony_idx].get_target_colony(&direction) {
                         if !self.destroyed_colonies[target_idx] {
                             let target_colony = &self.colonies[target_idx];

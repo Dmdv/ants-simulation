@@ -1,5 +1,4 @@
 use rand::prelude::*;
-use rand::rng;
 
 #[derive(Debug, Clone)]
 pub struct Colony {
@@ -42,7 +41,7 @@ impl Colony {
         self.available_directions |= DIRECTION_MASKS[direction as usize];
     }
 
-    pub fn get_random_direction(&self) -> Option<Direction> {
+    pub fn get_random_direction(&self, rng: &mut SmallRng) -> Option<Direction> {
         if self.available_directions == 0 {
             return None;
         }
@@ -54,7 +53,6 @@ impl Colony {
         }
 
         // Generate random index
-        let mut rng = rng();
         let idx = rng.random_range(0..count);
 
         // Find the nth available direction using bit manipulation
