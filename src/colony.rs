@@ -1,51 +1,69 @@
-use std::collections::HashMap;
-use rand::seq::SliceRandom;
+use rand::prelude::*;
+use rand::rng;
 
 #[derive(Debug, Clone)]
 pub struct Colony {
     pub name: String,  // Kept for display purposes only
-    pub tunnels: HashMap<Direction, usize>,  // Maps direction to colony index
+    tunnels: [Option<usize>; 4],  // Fixed-size array for tunnels, indexed by Direction
     pub is_destroyed: bool,
     pub ant_id: Option<usize>,  // The ant currently in this colony, if any
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
 pub enum Direction {
-    North,
-    South,
-    East,
-    West,
+    North = 0,
+    South = 1,
+    East = 2,
+    West = 3,
 }
+
+const ALL_DIRECTIONS: [Direction; 4] = [Direction::North, Direction::South, Direction::East, Direction::West];
 
 impl Colony {
     pub fn new(name: String) -> Self {
         Self {
             name,
-            tunnels: HashMap::new(),
+            tunnels: [None; 4],
             is_destroyed: false,
             ant_id: None,
         }
     }
 
     pub fn add_tunnel(&mut self, direction: Direction, target: usize) {
-        self.tunnels.insert(direction, target);
+        self.tunnels[direction as usize] = Some(target);
     }
 
     pub fn get_random_direction(&self) -> Option<Direction> {
-        if self.tunnels.is_empty() {
+        // Use a static array to avoid allocation
+        let mut available_count = 0;
+        let mut available = [Direction::North; 4];
+        
+        for (i, &tunnel) in self.tunnels.iter().enumerate() {
+            if tunnel.is_some() {
+                available[available_count] = ALL_DIRECTIONS[i];
+                available_count += 1;
+            }
+        }
+        
+        if available_count == 0 {
             return None;
         }
         
-        let directions: Vec<Direction> = self.tunnels.keys().cloned().collect();
-        Some(directions.choose(&mut rand::thread_rng()).unwrap().clone())
+        // Use slice to avoid copying the whole array
+        Some(*(&available[..available_count]).choose(&mut rng()).unwrap())
     }
 
     pub fn get_target_colony(&self, direction: &Direction) -> Option<usize> {
-        self.tunnels.get(direction).copied()
+        self.tunnels[*direction as usize]
     }
 
     pub fn remove_tunnel_to(&mut self, target: usize) {
-        self.tunnels.retain(|_, t| *t != target);
+        for tunnel in &mut self.tunnels {
+            if *tunnel == Some(target) {
+                *tunnel = None;
+                break;
+            }
+        }
     }
 
     pub fn set_ant(&mut self, ant_id: Option<usize>) {

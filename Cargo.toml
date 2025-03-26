@@ -6,7 +6,7 @@ authors = ["Dmitry Dyachkov"]
 description = "Ant Mania - A simulation of space ant invasion"
 
 [dependencies]
-rand = "0.8"
+rand = { version = "0.9.0", features = ["small_rng"] }
 clap = { version = "4.4", features = ["derive"] }
 rayon = "1.8"
 

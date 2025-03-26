@@ -32,6 +32,19 @@ cargo run --release -- -a 100 -m map.txt
 cargo bench
 ```
 
+###### Optimization
+
+- For 3 ants: ~97.8% improvement (from ~17ms to ~384µs)
+- For 6 ants: ~99.9% improvement (from ~40ms to ~50µs)
+- For 9 ants: ~99.9% improvement (from ~60ms to ~7.5µs)
+
+##### Optimization 2
+
+- 3 ants: ~67% faster (from ~480µs to ~159µs)
+- 6 ants: ~70% faster (from ~110µs to ~33µs)
+- 9 ants: ~70% faster (from ~23µs to ~7µs)
+
+
 ## License
 
 MIT License 
