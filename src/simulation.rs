@@ -153,24 +153,26 @@ impl Simulation {
         self.colonies_to_destroy.clear();
         self.ants_to_kill.clear();
 
-        // Single pass: collect moves and fights
+        // First pass: collect moves and fights
         for ant_id in 0..self.ants.len() {
             if let Some(colony_idx) = self.ants[ant_id].colony_idx {
                 if let Some(direction) = self.colonies[colony_idx].get_random_direction() {
                     if let Some(target_idx) = self.colonies[colony_idx].get_target_colony(&direction) {
                         if !self.destroyed_colonies[target_idx] {
                             let target_colony = &self.colonies[target_idx];
-                            if target_colony.get_ant().is_none() {
+                            let target_ant = target_colony.get_ant();
+                            
+                            if target_ant.is_none() {
                                 self.moves_to_make.push((ant_id, colony_idx, target_idx));
                             } else {
                                 // Fight detected
                                 self.colonies_to_destroy.push(target_idx);
                                 self.ants_to_kill.push(ant_id);
-                                self.ants_to_kill.push(target_colony.get_ant().unwrap());
+                                self.ants_to_kill.push(target_ant.unwrap());
                                 
                                 if self.debug {
                                     println!("{} has been destroyed by ant {} and ant {}!", 
-                                        target_colony.name, ant_id, target_colony.get_ant().unwrap());
+                                        target_colony.name, ant_id, target_ant.unwrap());
                                 }
                             }
                         }
@@ -179,23 +181,23 @@ impl Simulation {
             }
         }
 
-        // Process fights and moves in a single pass
-        for colony_idx in &self.colonies_to_destroy {
-            self.destroyed_colonies[*colony_idx] = true;
-            self.colonies[*colony_idx].set_destroyed(true);
+        // Second pass: process fights
+        for &colony_idx in &self.colonies_to_destroy {
+            self.destroyed_colonies[colony_idx] = true;
+            self.colonies[colony_idx].set_destroyed(true);
             
             // Remove tunnels to destroyed colony
             for colony in &mut self.colonies {
-                colony.remove_tunnel_to(*colony_idx);
+                colony.remove_tunnel_to(colony_idx);
             }
         }
 
-        // Kill ants
+        // Third pass: kill ants
         for &ant_id in &self.ants_to_kill {
             self.ants[ant_id].colony_idx = None;
         }
 
-        // Process moves
+        // Fourth pass: process moves
         for &(ant_id, from_idx, to_idx) in &self.moves_to_make {
             if !self.destroyed_colonies[to_idx] && self.ants[ant_id].colony_idx.is_some() {
                 // Move ant to new colony
