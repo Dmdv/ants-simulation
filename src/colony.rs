@@ -3,9 +3,10 @@ use rand::seq::SliceRandom;
 
 #[derive(Debug, Clone)]
 pub struct Colony {
-    pub name: String,
-    pub tunnels: HashMap<Direction, String>,
+    pub name: String,  // Kept for display purposes only
+    pub tunnels: HashMap<Direction, usize>,  // Maps direction to colony index
     pub is_destroyed: bool,
+    pub ant_id: Option<usize>,  // The ant currently in this colony, if any
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -22,10 +23,11 @@ impl Colony {
             name,
             tunnels: HashMap::new(),
             is_destroyed: false,
+            ant_id: None,
         }
     }
 
-    pub fn add_tunnel(&mut self, direction: Direction, target: String) {
+    pub fn add_tunnel(&mut self, direction: Direction, target: usize) {
         self.tunnels.insert(direction, target);
     }
 
@@ -38,12 +40,20 @@ impl Colony {
         Some(directions.choose(&mut rand::thread_rng()).unwrap().clone())
     }
 
-    pub fn get_target_colony(&self, direction: &Direction) -> Option<&String> {
-        self.tunnels.get(direction)
+    pub fn get_target_colony(&self, direction: &Direction) -> Option<usize> {
+        self.tunnels.get(direction).copied()
     }
 
-    pub fn remove_tunnel_to(&mut self, target: &str) {
-        self.tunnels.retain(|_, t| t != target);
+    pub fn remove_tunnel_to(&mut self, target: usize) {
+        self.tunnels.retain(|_, t| *t != target);
+    }
+
+    pub fn set_ant(&mut self, ant_id: Option<usize>) {
+        self.ant_id = ant_id;
+    }
+
+    pub fn get_ant(&self) -> Option<usize> {
+        self.ant_id
     }
 }
 

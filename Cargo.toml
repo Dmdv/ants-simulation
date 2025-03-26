@@ -9,7 +9,10 @@ description = "Ant Mania - A simulation of space ant invasion"
 rand = "0.8"
 clap = { version = "4.4", features = ["derive"] }
 rayon = "1.8"
-criterion = "0.5"
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+pprof = { version = "0.14.0", features = ["criterion", "flamegraph"] }
 
 [[bench]]
 name = "simulation"

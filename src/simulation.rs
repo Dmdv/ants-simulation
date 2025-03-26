@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use rand::seq::SliceRandom;
 use crate::colony::{Colony, Direction};
 
@@ -12,7 +12,7 @@ const MAX_STEPS: u32 = 100_000;
 pub enum SimulationError {
     NoColonies,
     NoAnts,
-    InvalidColony(String),
+    InvalidColony(usize),
 }
 
 /// A simulation of ants moving between colonies, fighting when they meet.
@@ -24,29 +24,27 @@ pub enum SimulationError {
 /// - Destroyed colonies are removed from the map and can't be traveled to
 /// - Simulation ends when all ants are destroyed or max moves reached
 pub struct Simulation {
-    /// Map of colony names to their data
-    colonies: HashMap<String, Colony>,
-    /// Current position of each ant
-    ant_positions: HashMap<usize, String>,
+    /// Vector of colonies, indexed by their position
+    colonies: Vec<Colony>,
     /// Number of moves each ant has made
-    ant_moves: HashMap<usize, u32>,
-    /// Number of ants currently in each colony
-    colony_counts: HashMap<String, usize>,
-    /// Set of destroyed colony names for fast lookup
-    destroyed_colonies: HashSet<String>,
+    ant_moves: Vec<u32>,
+    /// Set of destroyed colony indices for fast lookup
+    destroyed_colonies: HashSet<usize>,
     /// Maximum number of moves allowed per ant
     max_moves: u32,
     /// Current step count of the simulation
     step_count: u32,
     /// Maximum number of steps allowed
     max_steps: u32,
+    /// Whether to print debug output
+    debug: bool,
 }
 
 impl Simulation {
     /// Creates a new simulation with the given colonies and number of ants.
     /// 
     /// # Arguments
-    /// * `colonies` - Map of colony names to their data
+    /// * `colonies` - Vector of colonies
     /// * `num_ants` - Number of ants to create
     /// 
     /// # Returns
@@ -55,7 +53,7 @@ impl Simulation {
     /// # Errors
     /// * `SimulationError::NoColonies` - If no colonies are provided
     /// * `SimulationError::NoAnts` - If num_ants is 0
-    pub fn new(colonies: HashMap<String, Colony>, num_ants: usize) -> Result<Self, SimulationError> {
+    pub fn new(mut colonies: Vec<Colony>, num_ants: usize) -> Result<Self, SimulationError> {
         if colonies.is_empty() {
             return Err(SimulationError::NoColonies);
         }
@@ -63,28 +61,32 @@ impl Simulation {
             return Err(SimulationError::NoAnts);
         }
 
-        let mut ant_positions = HashMap::new();
-        let mut ant_moves = HashMap::new();
-        let mut colony_counts = HashMap::new();
-        let colony_names: Vec<String> = colonies.keys().cloned().collect();
+        let ant_moves = vec![0; num_ants];
+        let mut rng = rand::thread_rng();
 
+        // Place ants randomly in colonies
         for ant_id in 0..num_ants {
-            let random_colony = colony_names.choose(&mut rand::thread_rng()).unwrap().clone();
-            ant_positions.insert(ant_id, random_colony.clone());
-            *colony_counts.entry(random_colony).or_insert(0) += 1;
-            ant_moves.insert(ant_id, 0);
+            let colony_indices: Vec<usize> = (0..colonies.len()).collect();
+            let colony_idx = *colony_indices.choose(&mut rng).unwrap();
+            colonies[colony_idx].set_ant(Some(ant_id));
         }
 
         Ok(Self {
             colonies,
-            ant_positions,
             ant_moves,
-            colony_counts,
             destroyed_colonies: HashSet::new(),
             max_moves: MAX_MOVES,
             step_count: 0,
             max_steps: MAX_STEPS,
+            debug: true,
         })
+    }
+
+    /// Creates a new simulation with debug output disabled (for benchmarks).
+    pub fn new_silent(colonies: Vec<Colony>, num_ants: usize) -> Result<Self, SimulationError> {
+        let mut sim = Self::new(colonies, num_ants)?;
+        sim.debug = false;
+        Ok(sim)
     }
 
     /// Runs the simulation until completion.
@@ -101,7 +103,9 @@ impl Simulation {
             self.step()?;
             self.step_count += 1;
             if self.step_count >= self.max_steps {
-                println!("Simulation stopped after {} steps", self.max_steps);
+                if self.debug {
+                    println!("Simulation stopped after {} steps", self.max_steps);
+                }
                 break;
             }
         }
@@ -122,81 +126,61 @@ impl Simulation {
         let mut colonies_to_destroy = HashSet::new();
         let mut ants_to_kill = HashSet::new();
         let mut moves_to_make = Vec::new();
-        let mut ants_to_remove = Vec::new();
 
         // Single pass: collect moves and process fights
-        for (ant_id, current_colony) in &self.ant_positions {
-            if let Some(colony) = self.colonies.get(current_colony) {
-                let targets: Vec<(&Direction, &String)> = colony.tunnels.iter().collect();
-
-                if !targets.is_empty() {
-                    let available_targets: Vec<_> = targets.iter()
-                        .filter(|(_, target)| {
-                            // Single HashMap lookup for count and check destroyed status from cache
-                            self.colony_counts.get(*target).unwrap_or(&0) == &0 &&
-                            !self.destroyed_colonies.contains(*target)
-                        })
-                        .collect();
-
-                    if !available_targets.is_empty() {
-                        let target = available_targets.choose(&mut rand::thread_rng()).unwrap().1;
-                        
-                        // Check if this colony already has an ant
-                        if let Some(existing_ant) = moves_to_make.iter().find(|(_, t)| t == target) {
-                            // Fight detected
-                            colonies_to_destroy.insert(target.clone());
-                            ants_to_kill.insert(existing_ant.0);
-                            ants_to_kill.insert(*ant_id);
-                            
-                            // Update colony counts for killed ants
-                            if let Some(old_colony) = self.ant_positions.get(&existing_ant.0) {
-                                *self.colony_counts.get_mut(old_colony).unwrap() -= 1;
+        for (colony_idx, colony) in self.colonies.iter().enumerate() {
+            if let Some(ant_id) = colony.get_ant() {
+                if let Some(direction) = colony.get_random_direction() {
+                    if let Some(target_idx) = colony.get_target_colony(&direction) {
+                        if !self.destroyed_colonies.contains(&target_idx) {
+                            let target_colony = &self.colonies[target_idx];
+                            if target_colony.get_ant().is_none() {
+                                moves_to_make.push((ant_id, colony_idx, target_idx));
+                            } else {
+                                // Fight detected
+                                colonies_to_destroy.insert(target_idx);
+                                ants_to_kill.insert(ant_id);
+                                ants_to_kill.insert(target_colony.get_ant().unwrap());
+                                
+                                if self.debug {
+                                    println!("{} has been destroyed by ant {} and ant {}!", 
+                                        target_colony.name, ant_id, target_colony.get_ant().unwrap());
+                                }
                             }
-                            if let Some(old_colony) = self.ant_positions.get(ant_id) {
-                                *self.colony_counts.get_mut(old_colony).unwrap() -= 1;
-                            }
-                            
-                            // Collect ants to remove
-                            ants_to_remove.push(existing_ant.0);
-                            ants_to_remove.push(*ant_id);
-                            
-                            println!("{} has been destroyed by ant {} and ant {}!", 
-                                target, existing_ant.0, ant_id);
-                        } else {
-                            moves_to_make.push((*ant_id, target.clone()));
                         }
                     }
                 }
-            } else {
-                return Err(SimulationError::InvalidColony(current_colony.clone()));
+            }
+        }
+
+        // Process moves and fights
+        for (ant_id, from_idx, to_idx) in moves_to_make {
+            if !colonies_to_destroy.contains(&to_idx) && !ants_to_kill.contains(&ant_id) {
+                // Move ant to new colony
+                self.colonies[from_idx].set_ant(None);
+                self.colonies[to_idx].set_ant(Some(ant_id));
+                self.ant_moves[ant_id] += 1;
             }
         }
 
         // Remove killed ants
-        for ant_id in ants_to_remove {
-            self.ant_positions.remove(&ant_id);
-        }
-
-        // Update colonies and ant positions in a single pass
-        for (ant_id, new_colony) in moves_to_make {
-            if !colonies_to_destroy.contains(&new_colony) && !ants_to_kill.contains(&ant_id) {
-                if let Some(old_colony) = self.ant_positions.get(&ant_id) {
-                    *self.colony_counts.get_mut(old_colony).unwrap() -= 1;
+        for ant_id in ants_to_kill {
+            for colony in &mut self.colonies {
+                if colony.get_ant() == Some(ant_id) {
+                    colony.set_ant(None);
+                    break;
                 }
-                *self.colony_counts.entry(new_colony.clone()).or_insert(0) += 1;
-                self.ant_positions.insert(ant_id, new_colony);
-                *self.ant_moves.get_mut(&ant_id).unwrap() += 1;
             }
         }
 
         // Update destroyed colonies
-        for colony_name in &colonies_to_destroy {
-            if let Some(colony) = self.colonies.get_mut(colony_name) {
-                colony.is_destroyed = true;
-                self.destroyed_colonies.insert(colony_name.clone());
-                for other_colony in self.colonies.values_mut() {
-                    other_colony.remove_tunnel_to(colony_name);
-                }
+        for colony_idx in &colonies_to_destroy {
+            self.colonies[*colony_idx].is_destroyed = true;
+            self.destroyed_colonies.insert(*colony_idx);
+            
+            // Remove tunnels to destroyed colony
+            for colony in &mut self.colonies {
+                colony.remove_tunnel_to(*colony_idx);
             }
         }
 
@@ -209,14 +193,15 @@ impl Simulation {
     /// - It hasn't been destroyed in a fight
     /// - It hasn't reached max_moves
     fn are_ants_active(&self) -> bool {
-        if self.ant_positions.is_empty() {
-            return false; // All ants have been destroyed
-        }
-
         // Check if any ants haven't reached max moves yet
-        for (ant_id, moves) in &self.ant_moves {
-            if *moves < self.max_moves && self.ant_positions.contains_key(ant_id) {
-                return true;
+        for (ant_id, moves) in self.ant_moves.iter().enumerate() {
+            if *moves < self.max_moves {
+                // Check if this ant is still alive
+                for colony in &self.colonies {
+                    if colony.get_ant() == Some(ant_id) {
+                        return true;
+                    }
+                }
             }
         }
         false
@@ -227,10 +212,10 @@ impl Simulation {
     /// Format: "colony_name direction=target ..."
     /// Only prints non-destroyed colonies.
     pub fn print_final_state(&self) {
-        for (name, colony) in &self.colonies {
+        for colony in &self.colonies {
             if !colony.is_destroyed {
-                print!("{}", name);
-                for (direction, target) in &colony.tunnels {
+                print!("{}", colony.name);
+                for (direction, target_idx) in &colony.tunnels {
                     print!(" {}={}", 
                         match direction {
                             Direction::North => "north",
@@ -238,7 +223,7 @@ impl Simulation {
                             Direction::East => "east",
                             Direction::West => "west",
                         },
-                        target
+                        self.colonies[*target_idx].name
                     );
                 }
                 println!();
